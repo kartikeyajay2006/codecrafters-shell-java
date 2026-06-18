@@ -16,6 +16,8 @@ public class Main {
     private static final List<String> BUILTINS =
             List.of("echo", "exit", "type", "pwd", "cd", "jobs");
 
+    private static int jobCounter = 0;
+
     private static List<String> parseCommand(String input) {
 
         List<String> tokens = new ArrayList<>();
@@ -201,6 +203,14 @@ public class Main {
 
             if (parts.isEmpty()) continue;
 
+            // Check for background operator &
+            boolean background = false;
+            if (parts.get(parts.size() - 1).equals("&")) {
+                background = true;
+                parts = new ArrayList<>(parts.subList(0, parts.size() - 1));
+                if (parts.isEmpty()) continue;
+            }
+
             String cmd = parts.get(0);
 
             if (cmd.equals("exit")) break;
@@ -235,7 +245,6 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // no output when no background jobs
                 continue;
             }
 
@@ -290,7 +299,22 @@ public class Main {
 
                 Redirect redirect = findRedirect(parts);
 
-                if (redirect != null) {
+                if (background) {
+                    // Run in background: start process, don't wait
+                    List<String> command = redirect != null
+                            ? new ArrayList<>(parts.subList(0, redirect.index))
+                            : new ArrayList<>(parts);
+
+                    ProcessBuilder pb = new ProcessBuilder(command);
+                    pb.directory(currentDirectory);
+                    pb.inheritIO();
+
+                    Process process = pb.start();
+                    jobCounter++;
+                    long pid = process.pid();
+                    System.out.println("[" + jobCounter + "] " + pid);
+
+                } else if (redirect != null) {
                     List<String> command = new ArrayList<>(parts.subList(0, redirect.index));
 
                     ProcessBuilder pb = new ProcessBuilder(command);
