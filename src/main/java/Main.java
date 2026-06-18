@@ -156,12 +156,26 @@ public class Main {
                 .system(true)
                 .build();
 
-        // Custom completer: only complete builtin names at word start
         Completer completer = (reader, line, candidates) -> {
+            // Only complete the first word (the command)
+            String buffer = line.line();
+            int cursor = line.cursor();
+            // Only trigger if we're still on the first word (no space before cursor)
+            String beforeCursor = buffer.substring(0, cursor);
+            if (beforeCursor.contains(" ")) return;
+
             String word = line.word();
             for (String builtin : BUILTINS) {
-                if (builtin.startsWith(word)) {
-                    candidates.add(new Candidate(builtin));
+                if (builtin.startsWith(word) && !builtin.equals(word)) {
+                    candidates.add(new Candidate(
+                            builtin,  // value
+                            builtin,  // display
+                            null,     // group
+                            null,     // description
+                            null,     // suffix — JLine adds space automatically
+                            null,     // key
+                            true      // complete (append space)
+                    ));
                 }
             }
         };
@@ -170,6 +184,10 @@ public class Main {
                 .terminal(terminal)
                 .completer(completer)
                 .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)
+                .option(LineReader.Option.AUTO_LIST, false)
+                .option(LineReader.Option.AUTO_MENU, false)
+                .option(LineReader.Option.MENU_COMPLETE, false)
+                .variable(LineReader.BELL_STYLE, "none")
                 .build();
 
         while (true) {
