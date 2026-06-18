@@ -11,21 +11,31 @@ public class Main {
 
             String s = input.nextLine();
 
+            // exit builtin
             if (s.equals("exit")) {
                 break;
             }
 
+            // pwd builtin
+            if (s.equals("pwd")) {
+                System.out.println(System.getProperty("user.dir"));
+                continue;
+            }
+
+            // echo builtin
             if (s.startsWith("echo ")) {
                 System.out.println(s.substring(5));
                 continue;
             }
 
+            // type builtin
             if (s.startsWith("type ")) {
                 String cmd = s.substring(5);
 
                 if (cmd.equals("echo") ||
                     cmd.equals("exit") ||
-                    cmd.equals("type")) {
+                    cmd.equals("type") ||
+                    cmd.equals("pwd")) {
 
                     System.out.println(cmd + " is a shell builtin");
                     continue;
@@ -81,6 +91,8 @@ public class Main {
             }
 
             if (executable != null) {
+                parts[0] = executable.getAbsolutePath();
+
                 ProcessBuilder pb =
                     new ProcessBuilder(Arrays.asList(parts));
 
