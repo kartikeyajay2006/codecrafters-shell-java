@@ -261,21 +261,20 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // Determine the current + and - markers across all known tracking jobs in this execution frame.
-                // Even if a job is newly completed, it gets its symbol generated before being removed.
+                // Calculate original frame markers across the complete job tracking state
                 int lastIdx = jobs.size() - 1;
                 int secondLastIdx = jobs.size() - 2;
 
-                Iterator<Job> iterator = jobs.iterator();
-                int idx = 0;
-                while (iterator.hasNext()) {
-                    Job job = iterator.next();
+                List<Job> jobsToRemove = new ArrayList<>();
+
+                for (int i = 0; i < jobs.size(); i++) {
+                    Job job = jobs.get(i);
                     boolean active = job.isRunning();
 
                     String marker;
-                    if (idx == lastIdx) {
+                    if (i == lastIdx) {
                         marker = "+";
-                    } else if (idx == secondLastIdx) {
+                    } else if (i == secondLastIdx) {
                         marker = "-";
                     } else {
                         marker = " ";
@@ -287,15 +286,12 @@ public class Main {
                     } else {
                         String statusStr = String.format("%-24s", "Done");
                         System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
-                        // Clean up / reap the process from the tracking list
-                        iterator.remove();
-                        // Adjust indexes since we modified list topology mid-flight
-                        if (idx <= lastIdx) lastIdx--;
-                        if (idx <= secondLastIdx) secondLastIdx--;
-                        idx--;
+                        jobsToRemove.add(job);
                     }
-                    idx++;
                 }
+
+                // Reap completed jobs so they are removed from subsequent calls
+                jobs.removeAll(jobsToRemove);
                 continue;
             }
 
