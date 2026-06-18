@@ -316,78 +316,119 @@ public class Main {
                     stages.add(currentStage);
                 }
 
-                // Iterative execution loop passing dynamic byte streams downward
-                InputStream pipelineInput = null;
-                
-                for (int i = 0; i < stages.size(); i++) {
-                    List<String> stageParts = stages.get(i);
-                    String stageCmd = stageParts.get(0);
-                    boolean isBuiltin = BUILTINS.contains(stageCmd);
-                    boolean isLastStage = (i == stages.size() - 1);
+                // Check if ALL stages are external binaries
+                boolean allExternal = true;
+                for (List<String> stage : stages) {
+                    if (BUILTINS.contains(stage.get(0))) {
+                        allExternal = false;
+                        break;
+                    }
+                }
 
-                    if (isBuiltin) {
-                        ByteArrayOutputStream stageOutputBuffer = new ByteArrayOutputStream();
-                        try (PrintStream stagePrintStream = new PrintStream(stageOutputBuffer, true, StandardCharsets.UTF_8)) {
-                            executeBuiltin(stageCmd, stageParts, pipelineInput, isLastStage ? System.out : stagePrintStream);
-                        }
-                        
-                        if (pipelineInput != null) {
-                            pipelineInput.close();
-                        }
-                        
-                        // Treat the collected builtin buffer output as input for the next stage
-                        pipelineInput = new ByteArrayInputStream(stageOutputBuffer.toByteArray());
-                        
-                        if (isLastStage) {
-                            System.out.print(stageOutputBuffer.toString(StandardCharsets.UTF_8));
-                        }
-                    } else {
-                        // External command execution stage
-                        String executablePath = findExecutable(stageCmd);
-                        if (executablePath == null) {
-                            System.out.println(stageCmd + ": command not found");
+                if (allExternal) {
+                    // Safe execution path for purely external streaming commands (like tail -f)
+                    List<ProcessBuilder> builders = new ArrayList<>();
+                    boolean lookupFailed = false;
+
+                    for (int i = 0; i < stages.size(); i++) {
+                        List<String> stageParts = stages.get(i);
+                        String binaryPath = findExecutable(stageParts.get(0));
+                        if (binaryPath == null) {
+                            System.out.println(stageParts.get(0) + ": command not found");
+                            lookupFailed = true;
                             break;
                         }
-
                         List<String> fullCommand = new ArrayList<>(stageParts);
-                        fullCommand.set(0, executablePath);
+                        fullCommand.set(0, binaryPath);
 
                         ProcessBuilder pb = new ProcessBuilder(fullCommand).directory(currentDirectory);
                         
-                        if (pipelineInput == null) {
-                            pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-                        } else {
-                            pb.redirectInput(ProcessBuilder.Redirect.PIPE);
-                        }
-
-                        if (isLastStage) {
-                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                        } else {
-                            pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
-                        }
-                        
+                        if (i == 0) pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                        if (i == stages.size() - 1) pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                        
+                        builders.add(pb);
+                    }
 
-                        Process process = pb.start();
+                    if (!lookupFailed) {
+                        List<Process> pipeline = ProcessBuilder.startPipeline(builders);
+                        pipeline.get(pipeline.size() - 1).waitFor();
+                    }
+                } else {
+                    // Hybrid execution path for built-ins mixing with external binaries
+                    InputStream pipelineInput = null;
+                    
+                    for (int i = 0; i < stages.size(); i++) {
+                        List<String> stageParts = stages.get(i);
+                        String stageCmd = stageParts.get(0);
+                        boolean isBuiltin = BUILTINS.contains(stageCmd);
+                        boolean isLastStage = (i == stages.size() - 1);
 
-                        // Asynchronously drain standard input into the process if it's connected to an upstream pipe
-                        if (pipelineInput != null) {
-                            try (OutputStream os = process.getOutputStream()) {
-                                pipelineInput.transferTo(os);
+                        if (isBuiltin) {
+                            ByteArrayOutputStream stageOutputBuffer = new ByteArrayOutputStream();
+                            try (PrintStream stagePrintStream = new PrintStream(stageOutputBuffer, true, StandardCharsets.UTF_8)) {
+                                executeBuiltin(stageCmd, stageParts, pipelineInput, isLastStage ? System.out : stagePrintStream);
                             }
-                            pipelineInput.close();
-                        }
-
-                        if (isLastStage) {
-                            process.waitFor();
+                            
+                            if (pipelineInput != null) {
+                                pipelineInput.close();
+                            }
+                            
+                            pipelineInput = new ByteArrayInputStream(stageOutputBuffer.toByteArray());
+                            
+                            if (isLastStage) {
+                                System.out.print(stageOutputBuffer.toString(StandardCharsets.UTF_8));
+                            }
                         } else {
-                            pipelineInput = process.getInputStream();
+                            String executablePath = findExecutable(stageCmd);
+                            if (executablePath == null) {
+                                System.out.println(stageCmd + ": command not found");
+                                break;
+                            }
+
+                            List<String> fullCommand = new ArrayList<>(stageParts);
+                            fullCommand.set(0, executablePath);
+
+                            ProcessBuilder pb = new ProcessBuilder(fullCommand).directory(currentDirectory);
+                            
+                            if (pipelineInput == null) {
+                                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                            } else {
+                                pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+                            }
+
+                            if (isLastStage) {
+                                pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                            } else {
+                                pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+                            }
+                            
+                            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                            Process process = pb.start();
+
+                            if (pipelineInput != null) {
+                                final InputStream finalIn = pipelineInput;
+                                final OutputStream finalOut = process.getOutputStream();
+                                // Run data transfer inside a standalone background thread to avoid locking the shell execution pool
+                                Thread.startVirtualThread(() -> {
+                                    try (finalIn; finalOut) {
+                                        finalIn.transferTo(finalOut);
+                                    } catch (IOException ignored) {}
+                                });
+                            }
+
+                            if (isLastStage) {
+                                process.waitFor();
+                            } else {
+                                pipelineInput = process.getInputStream();
+                            }
                         }
                     }
-                }
-                
-                if (pipelineInput != null) {
-                    pipelineInput.close();
+                    
+                    if (pipelineInput != null) {
+                        pipelineInput.close();
+                    }
                 }
                 continue;
             }
