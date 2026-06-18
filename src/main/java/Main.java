@@ -9,20 +9,22 @@ public class Main {
             new File(System.getProperty("user.dir"));
 
     private static List<String> parseCommand(String input) {
-        List<String> tokens = new ArrayList<>();
 
+        List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
 
         boolean inSingleQuote = false;
         boolean inDoubleQuote = false;
 
         for (int i = 0; i < input.length(); i++) {
+
             char c = input.charAt(i);
 
-            // inside double quotes
+            // Backslashes inside double quotes
             if (inDoubleQuote && c == '\\') {
 
                 if (i + 1 < input.length()) {
+
                     char next = input.charAt(i + 1);
 
                     if (next == '"' || next == '\\') {
@@ -40,7 +42,7 @@ public class Main {
                 continue;
             }
 
-            // outside quotes escaping
+            // Backslashes outside quotes
             if (!inSingleQuote
                     && !inDoubleQuote
                     && c == '\\') {
@@ -55,19 +57,19 @@ public class Main {
                 continue;
             }
 
-            // single quote toggle
+            // Single quote
             if (c == '\'' && !inDoubleQuote) {
                 inSingleQuote = !inSingleQuote;
                 continue;
             }
 
-            // double quote toggle
+            // Double quote
             if (c == '"' && !inSingleQuote) {
                 inDoubleQuote = !inDoubleQuote;
                 continue;
             }
 
-            // argument separator
+            // Argument separator
             if (Character.isWhitespace(c)
                     && !inSingleQuote
                     && !inDoubleQuote) {
@@ -90,6 +92,7 @@ public class Main {
     }
 
     private static String findExecutable(String cmd) {
+
         String pathEnv = System.getenv("PATH");
 
         if (pathEnv == null) {
@@ -99,6 +102,7 @@ public class Main {
         String[] dirs = pathEnv.split(File.pathSeparator);
 
         for (String dir : dirs) {
+
             File file = new File(dir, cmd);
 
             if (file.exists()
@@ -113,6 +117,7 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
+
         Scanner input = new Scanner(System.in);
 
         while (true) {
@@ -136,9 +141,11 @@ public class Main {
 
             // pwd
             if (cmd.equals("pwd")) {
+
                 System.out.println(
                         currentDirectory.getCanonicalPath()
                 );
+
                 continue;
             }
 
@@ -154,11 +161,21 @@ public class Main {
                 File target;
 
                 if (path.equals("~")) {
-                    target = new File(System.getenv("HOME"));
+
+                    target = new File(
+                            System.getenv("HOME")
+                    );
+
                 } else if (new File(path).isAbsolute()) {
+
                     target = new File(path);
+
                 } else {
-                    target = new File(currentDirectory, path);
+
+                    target = new File(
+                            currentDirectory,
+                            path
+                    );
                 }
 
                 target = target.getCanonicalFile();
@@ -171,7 +188,8 @@ public class Main {
                 } else {
 
                     System.out.println(
-                            "cd: " + path
+                            "cd: "
+                                    + path
                                     + ": No such file or directory"
                     );
                 }
@@ -194,6 +212,7 @@ public class Main {
                 }
 
                 System.out.println(out);
+
                 continue;
             }
 
@@ -224,7 +243,9 @@ public class Main {
                     if (executable != null) {
 
                         System.out.println(
-                                target + " is " + executable
+                                target
+                                        + " is "
+                                        + executable
                         );
 
                     } else {
@@ -238,13 +259,18 @@ public class Main {
                 continue;
             }
 
-            // external commands
+            // External command
             String executable = findExecutable(cmd);
 
             if (executable != null) {
 
+                List<String> command =
+                        new ArrayList<>(parts);
+
+                command.set(0, executable);
+
                 ProcessBuilder pb =
-                        new ProcessBuilder(parts);
+                        new ProcessBuilder(command);
 
                 pb.directory(currentDirectory);
                 pb.inheritIO();
@@ -261,3 +287,4 @@ public class Main {
         }
     }
 }
+
