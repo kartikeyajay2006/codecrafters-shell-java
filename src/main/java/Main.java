@@ -2,6 +2,10 @@ import java.io.File;
 import java.util.Scanner;
 
 public class Main {
+
+    private static File currentDirectory =
+            new File(System.getProperty("user.dir"));
+
     public static void main(String[] args) throws Exception {
         Scanner input = new Scanner(System.in);
 
@@ -17,7 +21,24 @@ public class Main {
 
             // pwd builtin
             if (s.equals("pwd")) {
-                System.out.println(System.getProperty("user.dir"));
+                System.out.println(currentDirectory.getCanonicalPath());
+                continue;
+            }
+
+            // cd builtin (absolute paths)
+            if (s.startsWith("cd ")) {
+                String path = s.substring(3);
+
+                File target = new File(path);
+
+                if (target.exists() && target.isDirectory()) {
+                    currentDirectory = target.getCanonicalFile();
+                } else {
+                    System.out.println(
+                            "cd: " + path + ": No such file or directory"
+                    );
+                }
+
                 continue;
             }
 
@@ -34,7 +55,8 @@ public class Main {
                 if (cmd.equals("echo") ||
                     cmd.equals("exit") ||
                     cmd.equals("type") ||
-                    cmd.equals("pwd")) {
+                    cmd.equals("pwd") ||
+                    cmd.equals("cd")) {
 
                     System.out.println(cmd + " is a shell builtin");
                     continue;
@@ -53,7 +75,7 @@ public class Main {
                         file.canExecute()) {
 
                         System.out.println(
-                            cmd + " is " + file.getAbsolutePath()
+                                cmd + " is " + file.getAbsolutePath()
                         );
 
                         found = true;
@@ -68,7 +90,7 @@ public class Main {
                 continue;
             }
 
-            // External command execution
+            // external commands
             String[] parts = s.split(" ");
 
             String cmd = parts[0];
@@ -93,6 +115,7 @@ public class Main {
             if (found) {
                 ProcessBuilder pb = new ProcessBuilder(parts);
 
+                pb.directory(currentDirectory);
                 pb.inheritIO();
 
                 Process p = pb.start();
@@ -103,3 +126,4 @@ public class Main {
         }
     }
 }
+
