@@ -14,41 +14,49 @@ public class Main {
 
             String s = input.nextLine();
 
-            // exit builtin
+            // exit
             if (s.equals("exit")) {
                 break;
             }
 
-            // pwd builtin
+            // pwd
             if (s.equals("pwd")) {
                 System.out.println(currentDirectory.getCanonicalPath());
                 continue;
             }
 
-            // cd builtin (absolute paths)
+            // cd
             if (s.startsWith("cd ")) {
                 String path = s.substring(3);
 
-                File target = new File(path);
+                File target;
+
+                if (new File(path).isAbsolute()) {
+                    target = new File(path);
+                } else {
+                    target = new File(currentDirectory, path);
+                }
+
+                target = target.getCanonicalFile();
 
                 if (target.exists() && target.isDirectory()) {
-                    currentDirectory = target.getCanonicalFile();
+                    currentDirectory = target;
                 } else {
                     System.out.println(
-                            "cd: " + path + ": No such file or directory"
+                        "cd: " + path + ": No such file or directory"
                     );
                 }
 
                 continue;
             }
 
-            // echo builtin
+            // echo
             if (s.startsWith("echo ")) {
                 System.out.println(s.substring(5));
                 continue;
             }
 
-            // type builtin
+            // type
             if (s.startsWith("type ")) {
                 String cmd = s.substring(5);
 
@@ -75,7 +83,7 @@ public class Main {
                         file.canExecute()) {
 
                         System.out.println(
-                                cmd + " is " + file.getAbsolutePath()
+                            cmd + " is " + file.getAbsolutePath()
                         );
 
                         found = true;
@@ -126,4 +134,3 @@ public class Main {
         }
     }
 }
-
