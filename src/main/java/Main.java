@@ -129,23 +129,33 @@ public class Main {
                 continue;
             }
 
-            String redirectFile = null;
+            String stdoutFile = null;
+            String stderrFile = null;
 
-            for (int i = 0; i < parts.size(); i++) {
+            for (int i = 0; i < parts.size();) {
 
-                if (parts.get(i).equals(">") ||
-                    parts.get(i).equals("1>")) {
+                String token = parts.get(i);
+
+                if (token.equals(">") || token.equals("1>")) {
 
                     if (i + 1 < parts.size()) {
-
-                        redirectFile = parts.get(i + 1);
-
+                        stdoutFile = parts.get(i + 1);
                         parts.remove(i + 1);
                         parts.remove(i);
+                        continue;
                     }
 
-                    break;
+                } else if (token.equals("2>")) {
+
+                    if (i + 1 < parts.size()) {
+                        stderrFile = parts.get(i + 1);
+                        parts.remove(i + 1);
+                        parts.remove(i);
+                        continue;
+                    }
                 }
+
+                i++;
             }
 
             if (parts.isEmpty()) {
@@ -155,24 +165,42 @@ public class Main {
             String cmd = parts.get(0);
 
             PrintStream originalOut = System.out;
+            PrintStream originalErr = System.err;
+
             PrintStream redirectedOut = null;
-
-            if (redirectFile != null) {
-
-                File file = new File(redirectFile);
-
-                if (!file.isAbsolute()) {
-                    file = new File(currentDirectory, redirectFile);
-                }
-
-                redirectedOut =
-                        new PrintStream(
-                                new FileOutputStream(file, false));
-
-                System.setOut(redirectedOut);
-            }
+            PrintStream redirectedErr = null;
 
             try {
+
+                if (stdoutFile != null) {
+
+                    File file = new File(stdoutFile);
+
+                    if (!file.isAbsolute()) {
+                        file = new File(currentDirectory, stdoutFile);
+                    }
+
+                    redirectedOut =
+                            new PrintStream(
+                                    new FileOutputStream(file, false));
+
+                    System.setOut(redirectedOut);
+                }
+
+                if (stderrFile != null) {
+
+                    File file = new File(stderrFile);
+
+                    if (!file.isAbsolute()) {
+                        file = new File(currentDirectory, stderrFile);
+                    }
+
+                    redirectedErr =
+                            new PrintStream(
+                                    new FileOutputStream(file, false));
+
+                    System.setErr(redirectedErr);
+                }
 
                 // exit
                 if (cmd.equals("exit")) {
@@ -185,7 +213,6 @@ public class Main {
                     System.out.println(
                             currentDirectory.getCanonicalPath()
                     );
-
                     continue;
                 }
 
@@ -203,8 +230,7 @@ public class Main {
                     if (path.equals("~")) {
 
                         target = new File(
-                                System.getenv("HOME")
-                        );
+                                System.getenv("HOME"));
 
                     } else if (new File(path).isAbsolute()) {
 
@@ -214,8 +240,7 @@ public class Main {
 
                         target = new File(
                                 currentDirectory,
-                                path
-                        );
+                                path);
                     }
 
                     target = target.getCanonicalFile();
@@ -230,8 +255,7 @@ public class Main {
                         System.err.println(
                                 "cd: "
                                         + path
-                                        + ": No such file or directory"
-                        );
+                                        + ": No such file or directory");
                     }
 
                     continue;
@@ -240,9 +264,12 @@ public class Main {
                 // echo
                 if (cmd.equals("echo")) {
 
-                    StringBuilder out = new StringBuilder();
+                    StringBuilder out =
+                            new StringBuilder();
 
-                    for (int i = 1; i < parts.size(); i++) {
+                    for (int i = 1;
+                         i < parts.size();
+                         i++) {
 
                         if (i > 1) {
                             out.append(" ");
@@ -252,7 +279,6 @@ public class Main {
                     }
 
                     System.out.println(out);
-
                     continue;
                 }
 
@@ -272,8 +298,8 @@ public class Main {
                             || target.equals("cd")) {
 
                         System.out.println(
-                                target + " is a shell builtin"
-                        );
+                                target
+                                        + " is a shell builtin");
 
                     } else {
 
@@ -285,14 +311,13 @@ public class Main {
                             System.out.println(
                                     target
                                             + " is "
-                                            + executable
-                            );
+                                            + executable);
 
                         } else {
 
                             System.out.println(
-                                    target + ": not found"
-                            );
+                                    target
+                                            + ": not found");
                         }
                     }
 
@@ -300,7 +325,8 @@ public class Main {
                 }
 
                 // external commands
-                String executable = findExecutable(cmd);
+                String executable =
+                        findExecutable(cmd);
 
                 if (executable != null) {
 
@@ -309,25 +335,48 @@ public class Main {
 
                     pb.directory(currentDirectory);
 
-                    if (redirectFile != null) {
+                    if (stdoutFile != null) {
 
-                        File file = new File(redirectFile);
+                        File file =
+                                new File(stdoutFile);
 
                         if (!file.isAbsolute()) {
                             file = new File(
                                     currentDirectory,
-                                    redirectFile
-                            );
+                                    stdoutFile);
                         }
 
                         pb.redirectOutput(file);
-                        pb.redirectError(
-                                ProcessBuilder.Redirect.INHERIT
-                        );
+                    }
 
-                    } else {
+                    if (stderrFile != null) {
+
+                        File file =
+                                new File(stderrFile);
+
+                        if (!file.isAbsolute()) {
+                            file = new File(
+                                    currentDirectory,
+                                    stderrFile);
+                        }
+
+                        pb.redirectError(file);
+                    }
+
+                    if (stdoutFile == null
+                            && stderrFile == null) {
 
                         pb.inheritIO();
+
+                    } else if (stdoutFile == null) {
+
+                        pb.redirectOutput(
+                                ProcessBuilder.Redirect.INHERIT);
+
+                    } else if (stderrFile == null) {
+
+                        pb.redirectError(
+                                ProcessBuilder.Redirect.INHERIT);
                     }
 
                     Process process = pb.start();
@@ -336,16 +385,21 @@ public class Main {
                 } else {
 
                     System.out.println(
-                            cmd + ": command not found"
-                    );
+                            cmd + ": command not found");
                 }
 
             } finally {
 
                 if (redirectedOut != null) {
                     redirectedOut.close();
-                    System.setOut(originalOut);
                 }
+
+                if (redirectedErr != null) {
+                    redirectedErr.close();
+                }
+
+                System.setOut(originalOut);
+                System.setErr(originalErr);
             }
         }
     }
