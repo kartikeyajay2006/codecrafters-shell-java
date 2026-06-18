@@ -18,6 +18,27 @@ public class Main {
 
     private static int jobCounter = 0;
 
+    // Tracks background jobs
+    private static class Job {
+        int number;
+        long pid;
+        String command;
+        Process process;
+
+        Job(int number, long pid, String command, Process process) {
+            this.number = number;
+            this.pid = pid;
+            this.command = command;
+            this.process = process;
+        }
+
+        boolean isRunning() {
+            return process.isAlive();
+        }
+    }
+
+    private static final List<Job> jobs = new ArrayList<>();
+
     private static List<String> parseCommand(String input) {
 
         List<String> tokens = new ArrayList<>();
@@ -245,6 +266,14 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
+                for (Job job : jobs) {
+                    if (job.isRunning()) {
+                        // Format: [N]+  Running                 command &
+                        // "Running" padded to 24 chars total
+                        String status = String.format("%-24s", "Running");
+                        System.out.println("[" + job.number + "]+  " + status + job.command + " &");
+                    }
+                }
                 continue;
             }
 
@@ -300,18 +329,23 @@ public class Main {
                 Redirect redirect = findRedirect(parts);
 
                 if (background) {
-                    // Run in background with inherited IO so output appears in terminal
                     List<String> command = redirect != null
                             ? new ArrayList<>(parts.subList(0, redirect.index))
                             : new ArrayList<>(parts);
 
                     ProcessBuilder pb = new ProcessBuilder(command);
                     pb.directory(currentDirectory);
-                    pb.inheritIO();  // background process shares shell's stdin/stdout/stderr
+                    pb.inheritIO();
 
                     Process process = pb.start();
                     jobCounter++;
                     long pid = process.pid();
+
+                    // Store the command string (space-joined tokens)
+                    String commandStr = String.join(" ", command);
+
+                    jobs.add(new Job(jobCounter, pid, commandStr, process));
+
                     System.out.println("[" + jobCounter + "] " + pid);
 
                 } else if (redirect != null) {
