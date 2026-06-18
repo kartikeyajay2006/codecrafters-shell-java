@@ -261,16 +261,10 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // Determine layout symbols (+ / -) across currently alive processes
-                int lastRunningIdx = -1;
-                int secondLastRunningIdx = -1;
-
-                for (int i = 0; i < jobs.size(); i++) {
-                    if (jobs.get(i).isRunning()) {
-                        secondLastRunningIdx = lastRunningIdx;
-                        lastRunningIdx = i;
-                    }
-                }
+                // Determine the current + and - markers across all known tracking jobs in this execution frame.
+                // Even if a job is newly completed, it gets its symbol generated before being removed.
+                int lastIdx = jobs.size() - 1;
+                int secondLastIdx = jobs.size() - 2;
 
                 Iterator<Job> iterator = jobs.iterator();
                 int idx = 0;
@@ -279,9 +273,9 @@ public class Main {
                     boolean active = job.isRunning();
 
                     String marker;
-                    if (idx == lastRunningIdx) {
+                    if (idx == lastIdx) {
                         marker = "+";
-                    } else if (idx == secondLastRunningIdx) {
+                    } else if (idx == secondLastIdx) {
                         marker = "-";
                     } else {
                         marker = " ";
@@ -291,15 +285,14 @@ public class Main {
                         String statusStr = String.format("%-24s", "Running");
                         System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command + " &");
                     } else {
-                        // The job has exited cleanly (Done)
                         String statusStr = String.format("%-24s", "Done");
                         System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
-                        // Clean up / reap the process from the table
+                        // Clean up / reap the process from the tracking list
                         iterator.remove();
-                        // Adjust index trackers since we just removed an item
-                        if (idx <= lastRunningIdx) lastRunningIdx--;
-                        if (idx <= secondLastRunningIdx) secondLastRunningIdx--;
-                        idx--; 
+                        // Adjust indexes since we modified list topology mid-flight
+                        if (idx <= lastIdx) lastIdx--;
+                        if (idx <= secondLastIdx) secondLastIdx--;
+                        idx--;
                     }
                     idx++;
                 }
@@ -415,5 +408,3 @@ public class Main {
         terminal.close();
     }
 }
-
-
