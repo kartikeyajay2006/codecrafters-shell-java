@@ -18,7 +18,6 @@ public class Main {
 
     private static int jobCounter = 0;
 
-    // Tracks background jobs
     private static class Job {
         int number;
         long pid;
@@ -266,13 +265,33 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                for (Job job : jobs) {
-                    if (job.isRunning()) {
-                        // Format: [N]+  Running                 command &
-                        // "Running" padded to 24 chars total
-                        String status = String.format("%-24s", "Running");
-                        System.out.println("[" + job.number + "]+  " + status + job.command + " &");
+                // Find the indices of the most recent (current) and
+                // second most recent (previous) running jobs
+                int lastRunningIdx = -1;
+                int secondLastRunningIdx = -1;
+
+                for (int i = 0; i < jobs.size(); i++) {
+                    if (jobs.get(i).isRunning()) {
+                        secondLastRunningIdx = lastRunningIdx;
+                        lastRunningIdx = i;
                     }
+                }
+
+                for (int i = 0; i < jobs.size(); i++) {
+                    Job job = jobs.get(i);
+                    if (!job.isRunning()) continue;
+
+                    String marker;
+                    if (i == lastRunningIdx) {
+                        marker = "+";
+                    } else if (i == secondLastRunningIdx) {
+                        marker = "-";
+                    } else {
+                        marker = " ";
+                    }
+
+                    String status = String.format("%-24s", "Running");
+                    System.out.println("[" + job.number + "]" + marker + "  " + status + job.command + " &");
                 }
                 continue;
             }
@@ -341,9 +360,7 @@ public class Main {
                     jobCounter++;
                     long pid = process.pid();
 
-                    // Store the command string (space-joined tokens)
                     String commandStr = String.join(" ", command);
-
                     jobs.add(new Job(jobCounter, pid, commandStr, process));
 
                     System.out.println("[" + jobCounter + "] " + pid);
