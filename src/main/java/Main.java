@@ -39,6 +39,41 @@ public class Main {
 
     private static final List<Job> jobs = new ArrayList<>();
 
+    /**
+     * Scans the tracking table for newly exited background processes,
+     * displays their formatted status line exactly once, and removes them.
+     */
+    private static void reapCompletedJobs() {
+        int lastIdx = jobs.size() - 1;
+        int secondLastIdx = jobs.size() - 2;
+
+        List<Job> jobsToRemove = new ArrayList<>();
+
+        for (int i = 0; i < jobs.size(); i++) {
+            Job job = jobs.get(i);
+            boolean active = job.isRunning();
+
+            // Calculate markers based on the list configuration at evaluation time
+            String marker;
+            if (i == lastIdx) {
+                marker = "+";
+            } else if (i == secondLastIdx) {
+                marker = "-";
+            } else {
+                marker = " ";
+            }
+
+            if (!active) {
+                String statusStr = String.format("%-24s", "Done");
+                System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
+                jobsToRemove.add(job);
+            }
+        }
+
+        // Clean reaped tasks out of the live job pool
+        jobs.removeAll(jobsToRemove);
+    }
+
     private static List<String> parseCommand(String input) {
         List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -210,6 +245,8 @@ public class Main {
         while (true) {
             String line;
             try {
+                // Point 1: Automatically reap and report completed background jobs right before drawing the next prompt
+                reapCompletedJobs();
                 line = lineReader.readLine("$ ");
             } catch (EndOfFileException | UserInterruptException e) {
                 break;
@@ -261,16 +298,14 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // Calculate original frame markers across the complete job tracking state
+                // Point 2: Reap any newly completed jobs before displaying the current collection frame
+                reapCompletedJobs();
+
                 int lastIdx = jobs.size() - 1;
                 int secondLastIdx = jobs.size() - 2;
 
-                List<Job> jobsToRemove = new ArrayList<>();
-
                 for (int i = 0; i < jobs.size(); i++) {
                     Job job = jobs.get(i);
-                    boolean active = job.isRunning();
-
                     String marker;
                     if (i == lastIdx) {
                         marker = "+";
@@ -280,18 +315,9 @@ public class Main {
                         marker = " ";
                     }
 
-                    if (active) {
-                        String statusStr = String.format("%-24s", "Running");
-                        System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command + " &");
-                    } else {
-                        String statusStr = String.format("%-24s", "Done");
-                        System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
-                        jobsToRemove.add(job);
-                    }
+                    String statusStr = String.format("%-24s", "Running");
+                    System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command + " &");
                 }
-
-                // Reap completed jobs so they are removed from subsequent calls
-                jobs.removeAll(jobsToRemove);
                 continue;
             }
 
