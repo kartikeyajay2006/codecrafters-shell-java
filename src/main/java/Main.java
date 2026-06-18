@@ -19,31 +19,34 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            // backslash escaping (outside quotes only)
-            if (c == '\\' &&
-                !inSingleQuote &&
-                !inDoubleQuote) {
+            // backslash escaping ONLY outside quotes
+            if (c == '\\'
+                    && !inSingleQuote
+                    && !inDoubleQuote) {
 
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
                     i++;
+                } else {
+                    current.append('\\');
                 }
+
                 continue;
             }
 
-            // single quote
+            // single quotes
             if (c == '\'' && !inDoubleQuote) {
                 inSingleQuote = !inSingleQuote;
                 continue;
             }
 
-            // double quote
+            // double quotes
             if (c == '"' && !inSingleQuote) {
                 inDoubleQuote = !inDoubleQuote;
                 continue;
             }
 
-            // whitespace delimiter only outside quotes
+            // whitespace separates args only outside quotes
             if (Character.isWhitespace(c)
                     && !inSingleQuote
                     && !inDoubleQuote) {
@@ -138,12 +141,16 @@ public class Main {
 
                 target = target.getCanonicalFile();
 
-                if (target.exists() && target.isDirectory()) {
+                if (target.exists()
+                        && target.isDirectory()) {
+
                     currentDirectory = target;
+
                 } else {
+
                     System.out.println(
-                            "cd: " + path +
-                            ": No such file or directory"
+                            "cd: " + path
+                                    + ": No such file or directory"
                     );
                 }
 
@@ -156,6 +163,7 @@ public class Main {
                 StringBuilder out = new StringBuilder();
 
                 for (int i = 1; i < parts.size(); i++) {
+
                     if (i > 1) {
                         out.append(" ");
                     }
@@ -208,7 +216,7 @@ public class Main {
                 continue;
             }
 
-            // external command
+            // external commands
             String executable = findExecutable(cmd);
 
             if (executable != null) {
@@ -231,4 +239,3 @@ public class Main {
         }
     }
 }
-
