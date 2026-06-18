@@ -19,19 +19,31 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            // single quotes
+            // backslash escaping (outside quotes only)
+            if (c == '\\' &&
+                !inSingleQuote &&
+                !inDoubleQuote) {
+
+                if (i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++;
+                }
+                continue;
+            }
+
+            // single quote
             if (c == '\'' && !inDoubleQuote) {
                 inSingleQuote = !inSingleQuote;
                 continue;
             }
 
-            // double quotes
+            // double quote
             if (c == '"' && !inSingleQuote) {
                 inDoubleQuote = !inDoubleQuote;
                 continue;
             }
 
-            // split only outside quotes
+            // whitespace delimiter only outside quotes
             if (Character.isWhitespace(c)
                     && !inSingleQuote
                     && !inDoubleQuote) {
@@ -40,6 +52,7 @@ public class Main {
                     tokens.add(current.toString());
                     current.setLength(0);
                 }
+
             } else {
                 current.append(c);
             }
@@ -98,7 +111,9 @@ public class Main {
 
             // pwd
             if (cmd.equals("pwd")) {
-                System.out.println(currentDirectory.getCanonicalPath());
+                System.out.println(
+                        currentDirectory.getCanonicalPath()
+                );
                 continue;
             }
 
@@ -127,7 +142,8 @@ public class Main {
                     currentDirectory = target;
                 } else {
                     System.out.println(
-                            "cd: " + path + ": No such file or directory"
+                            "cd: " + path +
+                            ": No such file or directory"
                     );
                 }
 
@@ -143,6 +159,7 @@ public class Main {
                     if (i > 1) {
                         out.append(" ");
                     }
+
                     out.append(parts.get(i));
                 }
 
@@ -168,16 +185,20 @@ public class Main {
                     System.out.println(
                             target + " is a shell builtin"
                     );
+
                 } else {
 
                     String executable =
                             findExecutable(target);
 
                     if (executable != null) {
+
                         System.out.println(
                                 target + " is " + executable
                         );
+
                     } else {
+
                         System.out.println(
                                 target + ": not found"
                         );
@@ -202,6 +223,7 @@ public class Main {
                 process.waitFor();
 
             } else {
+
                 System.out.println(
                         cmd + ": command not found"
                 );
@@ -209,3 +231,4 @@ public class Main {
         }
     }
 }
+
