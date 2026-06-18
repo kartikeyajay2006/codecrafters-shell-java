@@ -3,8 +3,8 @@ import org.jline.reader.impl.completer.StringsCompleter;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
-import java.io.File;
-import java.io.FileWriter;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -219,6 +219,37 @@ public class Main {
         }
     }
 
+    /**
+     * Helper to run a builtin command while redirecting its output streams.
+     */
+    private static void executeBuiltin(String cmd, List<String> parts, InputStream in, PrintStream out) throws Exception {
+        if (cmd.equals("echo")) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i < parts.size(); i++) {
+                if (i > 1) sb.append(" ");
+                sb.append(parts.get(i));
+            }
+            out.println(sb.toString());
+        } else if (cmd.equals("pwd")) {
+            out.println(currentDirectory.getCanonicalPath());
+        } else if (cmd.equals("type")) {
+            if (parts.size() >= 2) {
+                String target = parts.get(1);
+                if (BUILTINS.contains(target)) {
+                    out.println(target + " is a shell builtin");
+                } else {
+                    String executable = findExecutable(target);
+                    if (executable != null) {
+                        out.println(target + " is " + executable);
+                    } else {
+                        out.println(target + ": not found");
+                    }
+                }
+            }
+        }
+        // cd, exit, jobs are skipped inside intermediate pipelines as per shell conventions
+    }
+
     public static void main(String[] args) throws Exception {
         Terminal terminal = TerminalBuilder.builder()
                 .system(true)
@@ -234,13 +265,7 @@ public class Main {
             for (String builtin : BUILTINS) {
                 if (builtin.startsWith(word) && !builtin.equals(word)) {
                     candidates.add(new Candidate(
-                            builtin,
-                            builtin,
-                            null,
-                            null,
-                            null,
-                            null,
-                            true
+                            builtin, builtin, null, null, null, null, true
                     ));
                 }
             }
@@ -266,7 +291,6 @@ public class Main {
             }
 
             List<String> parts = parseCommand(line);
-
             if (parts.isEmpty()) continue;
 
             // Check for background operator &
@@ -283,47 +307,101 @@ public class Main {
                 List<String> leftParts = parts.subList(0, pipeIndex);
                 List<String> rightParts = parts.subList(pipeIndex + 1, parts.size());
 
-                if (leftParts.isEmpty() || rightParts.isEmpty()) {
-                    System.out.println("Invalid pipeline syntax");
-                    continue;
-                }
-
                 String cmd1 = leftParts.get(0);
                 String cmd2 = rightParts.get(0);
 
-                String exec1 = findExecutable(cmd1);
-                String exec2 = findExecutable(cmd2);
+                boolean leftIsBuiltin = BUILTINS.contains(cmd1);
+                boolean rightIsBuiltin = BUILTINS.contains(cmd2);
 
-                if (exec1 == null) {
-                    System.out.println(cmd1 + ": command not found");
-                    continue;
+                // Scenario A: Both commands are external binaries
+                if (!leftIsBuiltin && !rightIsBuiltin) {
+                    String exec1 = findExecutable(cmd1);
+                    String exec2 = findExecutable(cmd2);
+
+                    if (exec1 == null || exec2 == null) {
+                        if (exec1 == null) System.out.println(cmd1 + ": command not found");
+                        if (exec2 == null) System.out.println(cmd2 + ": command not found");
+                        continue;
+                    }
+
+                    List<String> fullLeft = new ArrayList<>(leftParts); fullLeft.set(0, exec1);
+                    List<String> fullRight = new ArrayList<>(rightParts); fullRight.set(0, exec2);
+
+                    ProcessBuilder pb1 = new ProcessBuilder(fullLeft).directory(currentDirectory);
+                    ProcessBuilder pb2 = new ProcessBuilder(fullRight).directory(currentDirectory);
+
+                    pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                    pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
+                    pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                    List<Process> pipeline = ProcessBuilder.startPipeline(List.of(pb1, pb2));
+                    pipeline.get(pipeline.size() - 1).waitFor();
+                } 
+                // Scenario B: Left command is a Built-in, Right command is an External Binary
+                else if (leftIsBuiltin && !rightIsBuiltin) {
+                    String exec2 = findExecutable(cmd2);
+                    if (exec2 == null) {
+                        System.out.println(cmd2 + ": command not found");
+                        continue;
+                    }
+
+                    List<String> fullRight = new ArrayList<>(rightParts);
+                    fullRight.set(0, exec2);
+
+                    ProcessBuilder pb2 = new ProcessBuilder(fullRight).directory(currentDirectory);
+                    pb2.redirectInput(ProcessBuilder.Redirect.PIPE);
+                    pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                    Process p2 = pb2.start();
+
+                    // Redirect built-in output stream directly into the external process's stdin
+                    try (PrintStream ps = new PrintStream(p2.getOutputStream(), true, StandardCharsets.UTF_8)) {
+                        executeBuiltin(cmd1, leftParts, System.in, ps);
+                    }
+
+                    p2.waitFor();
+                } 
+                // Scenario C: Left command is an External Binary, Right command is a Built-in
+                else if (!leftIsBuiltin && rightIsBuiltin) {
+                    String exec1 = findExecutable(cmd1);
+                    if (exec1 == null) {
+                        System.out.println(cmd1 + ": command not found");
+                        continue;
+                    }
+
+                    List<String> fullLeft = new ArrayList<>(leftParts);
+                    fullLeft.set(0, exec1);
+
+                    ProcessBuilder pb1 = new ProcessBuilder(fullLeft).directory(currentDirectory);
+                    pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                    pb1.redirectOutput(ProcessBuilder.Redirect.PIPE);
+                    pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                    Process p1 = pb1.start();
+
+                    // Execute built-in using the upstream binary's stdout stream as its input
+                    try (InputStream is = p1.getInputStream()) {
+                        executeBuiltin(cmd2, rightParts, is, System.out);
+                        // Prevent hanging pipelines by draining remaining bytes from the binary
+                        is.transferTo(OutputStream.nullOutputStream());
+                    }
+
+                    p1.waitFor();
+                } 
+                // Scenario D: Both commands are Built-ins
+                else {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    try (PrintStream ps = new PrintStream(baos, true, StandardCharsets.UTF_8)) {
+                        executeBuiltin(cmd1, leftParts, System.in, ps);
+                    }
+
+                    byte[] data = baos.toByteArray();
+                    try (InputStream is = new ByteArrayInputStream(data)) {
+                        executeBuiltin(cmd2, rightParts, is, System.out);
+                    }
                 }
-                if (exec2 == null) {
-                    System.out.println(cmd2 + ": command not found");
-                    continue;
-                }
-
-                // Resolve full absolute absolute paths for executables
-                List<String> fullLeftCommand = new ArrayList<>(leftParts);
-                fullLeftCommand.set(0, exec1);
-
-                List<String> fullRightCommand = new ArrayList<>(rightParts);
-                fullRightCommand.set(0, exec2);
-
-                // Set up standard pipeline endpoints using ProcessBuilder
-                ProcessBuilder pb1 = new ProcessBuilder(fullLeftCommand).directory(currentDirectory);
-                ProcessBuilder pb2 = new ProcessBuilder(fullRightCommand).directory(currentDirectory);
-
-                // The first process inherits standard input, final process inherits standard output
-                pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
-                pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
-                pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
-
-                List<Process> pipeline = ProcessBuilder.startPipeline(List.of(pb1, pb2));
-                
-                // Block the terminal until the downstream command finishes execution frame
-                pipeline.get(pipeline.size() - 1).waitFor();
                 continue;
             }
 
