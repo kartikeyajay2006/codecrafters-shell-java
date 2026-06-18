@@ -219,9 +219,6 @@ public class Main {
         }
     }
 
-    /**
-     * Helper to run a builtin command while redirecting its output streams.
-     */
     private static void executeBuiltin(String cmd, List<String> parts, InputStream in, PrintStream out) throws Exception {
         if (cmd.equals("echo")) {
             StringBuilder sb = new StringBuilder();
@@ -247,7 +244,6 @@ public class Main {
                 }
             }
         }
-        // cd, exit, jobs are skipped inside intermediate pipelines as per shell conventions
     }
 
     public static void main(String[] args) throws Exception {
@@ -301,106 +297,97 @@ public class Main {
                 if (parts.isEmpty()) continue;
             }
 
-            // Check if this command contains a pipeline operator '|'
-            int pipeIndex = parts.indexOf("|");
-            if (pipeIndex != -1) {
-                List<String> leftParts = parts.subList(0, pipeIndex);
-                List<String> rightParts = parts.subList(pipeIndex + 1, parts.size());
-
-                String cmd1 = leftParts.get(0);
-                String cmd2 = rightParts.get(0);
-
-                boolean leftIsBuiltin = BUILTINS.contains(cmd1);
-                boolean rightIsBuiltin = BUILTINS.contains(cmd2);
-
-                // Scenario A: Both commands are external binaries
-                if (!leftIsBuiltin && !rightIsBuiltin) {
-                    String exec1 = findExecutable(cmd1);
-                    String exec2 = findExecutable(cmd2);
-
-                    if (exec1 == null || exec2 == null) {
-                        if (exec1 == null) System.out.println(cmd1 + ": command not found");
-                        if (exec2 == null) System.out.println(cmd2 + ": command not found");
-                        continue;
+            // Detect multi-stage pipelines
+            if (parts.contains("|")) {
+                List<List<String>> stages = new ArrayList<>();
+                List<String> currentStage = new ArrayList<>();
+                
+                for (String part : parts) {
+                    if (part.equals("|")) {
+                        if (!currentStage.isEmpty()) {
+                            stages.add(currentStage);
+                            currentStage = new ArrayList<>();
+                        }
+                    } else {
+                        currentStage.add(part);
                     }
+                }
+                if (!currentStage.isEmpty()) {
+                    stages.add(currentStage);
+                }
 
-                    List<String> fullLeft = new ArrayList<>(leftParts); fullLeft.set(0, exec1);
-                    List<String> fullRight = new ArrayList<>(rightParts); fullRight.set(0, exec2);
+                // Iterative execution loop passing dynamic byte streams downward
+                InputStream pipelineInput = null;
+                
+                for (int i = 0; i < stages.size(); i++) {
+                    List<String> stageParts = stages.get(i);
+                    String stageCmd = stageParts.get(0);
+                    boolean isBuiltin = BUILTINS.contains(stageCmd);
+                    boolean isLastStage = (i == stages.size() - 1);
 
-                    ProcessBuilder pb1 = new ProcessBuilder(fullLeft).directory(currentDirectory);
-                    ProcessBuilder pb2 = new ProcessBuilder(fullRight).directory(currentDirectory);
+                    if (isBuiltin) {
+                        ByteArrayOutputStream stageOutputBuffer = new ByteArrayOutputStream();
+                        try (PrintStream stagePrintStream = new PrintStream(stageOutputBuffer, true, StandardCharsets.UTF_8)) {
+                            executeBuiltin(stageCmd, stageParts, pipelineInput, isLastStage ? System.out : stagePrintStream);
+                        }
+                        
+                        if (pipelineInput != null) {
+                            pipelineInput.close();
+                        }
+                        
+                        // Treat the collected builtin buffer output as input for the next stage
+                        pipelineInput = new ByteArrayInputStream(stageOutputBuffer.toByteArray());
+                        
+                        if (isLastStage) {
+                            System.out.print(stageOutputBuffer.toString(StandardCharsets.UTF_8));
+                        }
+                    } else {
+                        // External command execution stage
+                        String executablePath = findExecutable(stageCmd);
+                        if (executablePath == null) {
+                            System.out.println(stageCmd + ": command not found");
+                            break;
+                        }
 
-                    pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
-                    pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                    pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
-                    pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
+                        List<String> fullCommand = new ArrayList<>(stageParts);
+                        fullCommand.set(0, executablePath);
 
-                    List<Process> pipeline = ProcessBuilder.startPipeline(List.of(pb1, pb2));
-                    pipeline.get(pipeline.size() - 1).waitFor();
-                } 
-                // Scenario B: Left command is a Built-in, Right command is an External Binary
-                else if (leftIsBuiltin && !rightIsBuiltin) {
-                    String exec2 = findExecutable(cmd2);
-                    if (exec2 == null) {
-                        System.out.println(cmd2 + ": command not found");
-                        continue;
+                        ProcessBuilder pb = new ProcessBuilder(fullCommand).directory(currentDirectory);
+                        
+                        if (pipelineInput == null) {
+                            pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                        } else {
+                            pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+                        }
+
+                        if (isLastStage) {
+                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                        } else {
+                            pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+                        }
+                        
+                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                        Process process = pb.start();
+
+                        // Asynchronously drain standard input into the process if it's connected to an upstream pipe
+                        if (pipelineInput != null) {
+                            try (OutputStream os = process.getOutputStream()) {
+                                pipelineInput.transferTo(os);
+                            }
+                            pipelineInput.close();
+                        }
+
+                        if (isLastStage) {
+                            process.waitFor();
+                        } else {
+                            pipelineInput = process.getInputStream();
+                        }
                     }
-
-                    List<String> fullRight = new ArrayList<>(rightParts);
-                    fullRight.set(0, exec2);
-
-                    ProcessBuilder pb2 = new ProcessBuilder(fullRight).directory(currentDirectory);
-                    pb2.redirectInput(ProcessBuilder.Redirect.PIPE);
-                    pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                    pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
-
-                    Process p2 = pb2.start();
-
-                    // Redirect built-in output stream directly into the external process's stdin
-                    try (PrintStream ps = new PrintStream(p2.getOutputStream(), true, StandardCharsets.UTF_8)) {
-                        executeBuiltin(cmd1, leftParts, System.in, ps);
-                    }
-
-                    p2.waitFor();
-                } 
-                // Scenario C: Left command is an External Binary, Right command is a Built-in
-                else if (!leftIsBuiltin && rightIsBuiltin) {
-                    String exec1 = findExecutable(cmd1);
-                    if (exec1 == null) {
-                        System.out.println(cmd1 + ": command not found");
-                        continue;
-                    }
-
-                    List<String> fullLeft = new ArrayList<>(leftParts);
-                    fullLeft.set(0, exec1);
-
-                    ProcessBuilder pb1 = new ProcessBuilder(fullLeft).directory(currentDirectory);
-                    pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
-                    pb1.redirectOutput(ProcessBuilder.Redirect.PIPE);
-                    pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
-
-                    Process p1 = pb1.start();
-
-                    // Execute built-in using the upstream binary's stdout stream as its input
-                    try (InputStream is = p1.getInputStream()) {
-                        executeBuiltin(cmd2, rightParts, is, System.out);
-                        // Prevent hanging pipelines by draining remaining bytes from the binary
-                        is.transferTo(OutputStream.nullOutputStream());
-                    }
-
-                    p1.waitFor();
-                } 
-                // Scenario D: Both commands are Built-ins
-                else {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    try (PrintStream ps = new PrintStream(baos, true, StandardCharsets.UTF_8)) {
-                        executeBuiltin(cmd1, leftParts, System.in, ps);
-                    }
-
-                    byte[] data = baos.toByteArray();
-                    try (InputStream is = new ByteArrayInputStream(data)) {
-                        executeBuiltin(cmd2, rightParts, is, System.out);
-                    }
+                }
+                
+                if (pipelineInput != null) {
+                    pipelineInput.close();
                 }
                 continue;
             }
