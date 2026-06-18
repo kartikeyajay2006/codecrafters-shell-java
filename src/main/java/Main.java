@@ -31,7 +31,9 @@ public class Main {
 
                 File target;
 
-                if (new File(path).isAbsolute()) {
+                if (path.equals("~")) {
+                    target = new File(System.getenv("HOME"));
+                } else if (new File(path).isAbsolute()) {
                     target = new File(path);
                 } else {
                     target = new File(currentDirectory, path);
@@ -43,7 +45,7 @@ public class Main {
                     currentDirectory = target;
                 } else {
                     System.out.println(
-                        "cd: " + path + ": No such file or directory"
+                            "cd: " + path + ": No such file or directory"
                     );
                 }
 
@@ -83,7 +85,7 @@ public class Main {
                         file.canExecute()) {
 
                         System.out.println(
-                            cmd + " is " + file.getAbsolutePath()
+                                cmd + " is " + file.getAbsolutePath()
                         );
 
                         found = true;
