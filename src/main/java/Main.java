@@ -14,7 +14,7 @@ public class Main {
             new File(System.getProperty("user.dir"));
 
     private static final List<String> BUILTINS =
-            List.of("echo", "exit", "type", "pwd", "cd");
+            List.of("echo", "exit", "type", "pwd", "cd", "jobs");
 
     private static List<String> parseCommand(String input) {
 
@@ -157,10 +157,8 @@ public class Main {
                 .build();
 
         Completer completer = (reader, line, candidates) -> {
-            // Only complete the first word (the command)
             String buffer = line.line();
             int cursor = line.cursor();
-            // Only trigger if we're still on the first word (no space before cursor)
             String beforeCursor = buffer.substring(0, cursor);
             if (beforeCursor.contains(" ")) return;
 
@@ -168,13 +166,13 @@ public class Main {
             for (String builtin : BUILTINS) {
                 if (builtin.startsWith(word) && !builtin.equals(word)) {
                     candidates.add(new Candidate(
-                            builtin,  // value
-                            builtin,  // display
-                            null,     // group
-                            null,     // description
-                            null,     // suffix — JLine adds space automatically
-                            null,     // key
-                            true      // complete (append space)
+                            builtin,
+                            builtin,
+                            null,
+                            null,
+                            null,
+                            null,
+                            true
                     ));
                 }
             }
@@ -233,6 +231,11 @@ public class Main {
                 } else {
                     System.out.println("cd: " + path + ": No such file or directory");
                 }
+                continue;
+            }
+
+            if (cmd.equals("jobs")) {
+                // no output when no background jobs
                 continue;
             }
 
