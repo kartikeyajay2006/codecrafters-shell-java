@@ -69,7 +69,7 @@ public class Main {
                 continue;
             }
 
-            // Argument separator
+            // Split on whitespace only outside quotes
             if (Character.isWhitespace(c)
                     && !inSingleQuote
                     && !inDoubleQuote) {
@@ -259,18 +259,13 @@ public class Main {
                 continue;
             }
 
-            // External command
+            // external commands
             String executable = findExecutable(cmd);
 
             if (executable != null) {
 
-                List<String> command =
-                        new ArrayList<>(parts);
-
-                command.set(0, executable);
-
                 ProcessBuilder pb =
-                        new ProcessBuilder(command);
+                        new ProcessBuilder(parts);
 
                 pb.directory(currentDirectory);
                 pb.inheritIO();
@@ -287,4 +282,3 @@ public class Main {
         }
     }
 }
-
