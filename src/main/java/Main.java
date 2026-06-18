@@ -40,10 +40,11 @@ public class Main {
     private static final List<Job> jobs = new ArrayList<>();
 
     /**
-     * Scans the tracking table for newly exited background processes,
-     * displays their formatted status line exactly once, and removes them.
+     * Automatic reaping logic that runs *before the prompt*.
+     * It checks for dead jobs, prints their 'Done' status line in correct list order,
+     * and clears them from our job tracker.
      */
-    private static void reapCompletedJobs() {
+    private static void reapCompletedJobsBeforePrompt() {
         int lastIdx = jobs.size() - 1;
         int secondLastIdx = jobs.size() - 2;
 
@@ -51,26 +52,21 @@ public class Main {
 
         for (int i = 0; i < jobs.size(); i++) {
             Job job = jobs.get(i);
-            boolean active = job.isRunning();
+            if (!job.isRunning()) {
+                String marker;
+                if (i == lastIdx) {
+                    marker = "+";
+                } else if (i == secondLastIdx) {
+                    marker = "-";
+                } else {
+                    marker = " ";
+                }
 
-            // Calculate markers based on the list configuration at evaluation time
-            String marker;
-            if (i == lastIdx) {
-                marker = "+";
-            } else if (i == secondLastIdx) {
-                marker = "-";
-            } else {
-                marker = " ";
-            }
-
-            if (!active) {
                 String statusStr = String.format("%-24s", "Done");
                 System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
                 jobsToRemove.add(job);
             }
         }
-
-        // Clean reaped tasks out of the live job pool
         jobs.removeAll(jobsToRemove);
     }
 
@@ -245,8 +241,8 @@ public class Main {
         while (true) {
             String line;
             try {
-                // Point 1: Automatically reap and report completed background jobs right before drawing the next prompt
-                reapCompletedJobs();
+                // Reap completed jobs cleanly right before presenting the prompt string
+                reapCompletedJobsBeforePrompt();
                 line = lineReader.readLine("$ ");
             } catch (EndOfFileException | UserInterruptException e) {
                 break;
@@ -298,14 +294,17 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // Point 2: Reap any newly completed jobs before displaying the current collection frame
-                reapCompletedJobs();
-
+                // Read frame markers ahead of modifications across the job pool layout
                 int lastIdx = jobs.size() - 1;
                 int secondLastIdx = jobs.size() - 2;
 
+                List<Job> jobsToRemove = new ArrayList<>();
+
+                // Single linear loop preserves exact order matching index tracking
                 for (int i = 0; i < jobs.size(); i++) {
                     Job job = jobs.get(i);
+                    boolean active = job.isRunning();
+
                     String marker;
                     if (i == lastIdx) {
                         marker = "+";
@@ -315,9 +314,18 @@ public class Main {
                         marker = " ";
                     }
 
-                    String statusStr = String.format("%-24s", "Running");
-                    System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command + " &");
+                    if (active) {
+                        String statusStr = String.format("%-24s", "Running");
+                        System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command + " &");
+                    } else {
+                        String statusStr = String.format("%-24s", "Done");
+                        System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
+                        jobsToRemove.add(job);
+                    }
                 }
+
+                // Discard entries evaluated as Done
+                jobs.removeAll(jobsToRemove);
                 continue;
             }
 
