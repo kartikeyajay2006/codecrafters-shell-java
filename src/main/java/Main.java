@@ -300,14 +300,14 @@ public class Main {
                 Redirect redirect = findRedirect(parts);
 
                 if (background) {
-                    // Run in background: start process, don't wait
+                    // Run in background with inherited IO so output appears in terminal
                     List<String> command = redirect != null
                             ? new ArrayList<>(parts.subList(0, redirect.index))
                             : new ArrayList<>(parts);
 
                     ProcessBuilder pb = new ProcessBuilder(command);
                     pb.directory(currentDirectory);
-                    pb.inheritIO();
+                    pb.inheritIO();  // background process shares shell's stdin/stdout/stderr
 
                     Process process = pb.start();
                     jobCounter++;
