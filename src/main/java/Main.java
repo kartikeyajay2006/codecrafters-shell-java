@@ -19,10 +19,31 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            // backslash escaping ONLY outside quotes
-            if (c == '\\'
-                    && !inSingleQuote
-                    && !inDoubleQuote) {
+            // inside double quotes
+            if (inDoubleQuote && c == '\\') {
+
+                if (i + 1 < input.length()) {
+                    char next = input.charAt(i + 1);
+
+                    if (next == '"' || next == '\\') {
+                        current.append(next);
+                        i++;
+                    } else {
+                        current.append('\\');
+                        current.append(next);
+                        i++;
+                    }
+                } else {
+                    current.append('\\');
+                }
+
+                continue;
+            }
+
+            // outside quotes escaping
+            if (!inSingleQuote
+                    && !inDoubleQuote
+                    && c == '\\') {
 
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
@@ -34,19 +55,19 @@ public class Main {
                 continue;
             }
 
-            // single quotes
+            // single quote toggle
             if (c == '\'' && !inDoubleQuote) {
                 inSingleQuote = !inSingleQuote;
                 continue;
             }
 
-            // double quotes
+            // double quote toggle
             if (c == '"' && !inSingleQuote) {
                 inDoubleQuote = !inDoubleQuote;
                 continue;
             }
 
-            // whitespace separates args only outside quotes
+            // argument separator
             if (Character.isWhitespace(c)
                     && !inSingleQuote
                     && !inDoubleQuote) {
@@ -95,6 +116,7 @@ public class Main {
         Scanner input = new Scanner(System.in);
 
         while (true) {
+
             System.out.print("$ ");
 
             String line = input.nextLine();
