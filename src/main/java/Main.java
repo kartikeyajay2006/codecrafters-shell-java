@@ -17,8 +17,6 @@ public class Main {
     private static final List<String> BUILTINS =
             List.of("echo", "exit", "type", "pwd", "cd", "jobs");
 
-    private static int jobCounter = 0;
-
     private static class Job {
         int number;
         long pid;
@@ -68,6 +66,37 @@ public class Main {
             }
         }
         jobs.removeAll(jobsToRemove);
+    }
+
+    /**
+     * Finds the smallest available job number starting from 1.
+     */
+    private static int getNextAvailableJobNumber() {
+        int candidate = 1;
+        while (true) {
+            boolean used = false;
+            for (Job job : jobs) {
+                if (job.number == candidate) {
+                    used = true;
+                    break;
+                }
+            }
+            if (!used) {
+                return candidate;
+            }
+            candidate++;
+        }
+    }
+
+    /**
+     * Inserts a job into the jobs list keeping it sorted by job number.
+     */
+    private static void addJobSorted(Job newJob) {
+        int index = 0;
+        while (index < jobs.size() && jobs.get(index).number < newJob.number) {
+            index++;
+        }
+        jobs.add(index, newJob);
     }
 
     private static List<String> parseCommand(String input) {
@@ -389,13 +418,17 @@ public class Main {
                     pb.inheritIO();
 
                     Process process = pb.start();
-                    jobCounter++;
+                    
+                    // Calculate and assign the smallest available recycled job number
+                    int assignedJobNumber = getNextAvailableJobNumber();
                     long pid = process.pid();
 
                     String commandStr = String.join(" ", command);
-                    jobs.add(new Job(jobCounter, pid, commandStr, process));
+                    
+                    // Always add sorted to maintain consistent output rendering
+                    addJobSorted(new Job(assignedJobNumber, pid, commandStr, process));
 
-                    System.out.println("[" + jobCounter + "] " + pid);
+                    System.out.println("[" + assignedJobNumber + "] " + pid);
 
                 } else if (redirect != null) {
                     List<String> command = new ArrayList<>(parts.subList(0, redirect.index));
