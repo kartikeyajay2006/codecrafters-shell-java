@@ -12,17 +12,30 @@ public class Main {
         List<String> tokens = new ArrayList<>();
 
         StringBuilder current = new StringBuilder();
+
         boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
 
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            if (c == '\'') {
+            // single quotes
+            if (c == '\'' && !inDoubleQuote) {
                 inSingleQuote = !inSingleQuote;
                 continue;
             }
 
-            if (Character.isWhitespace(c) && !inSingleQuote) {
+            // double quotes
+            if (c == '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+                continue;
+            }
+
+            // split only outside quotes
+            if (Character.isWhitespace(c)
+                    && !inSingleQuote
+                    && !inDoubleQuote) {
+
                 if (current.length() > 0) {
                     tokens.add(current.toString());
                     current.setLength(0);
@@ -51,9 +64,9 @@ public class Main {
         for (String dir : dirs) {
             File file = new File(dir, cmd);
 
-            if (file.exists() &&
-                file.isFile() &&
-                file.canExecute()) {
+            if (file.exists()
+                    && file.isFile()
+                    && file.canExecute()) {
 
                 return file.getAbsolutePath();
             }
@@ -114,7 +127,7 @@ public class Main {
                     currentDirectory = target;
                 } else {
                     System.out.println(
-                        "cd: " + path + ": No such file or directory"
+                            "cd: " + path + ": No such file or directory"
                     );
                 }
 
@@ -123,6 +136,7 @@ public class Main {
 
             // echo
             if (cmd.equals("echo")) {
+
                 StringBuilder out = new StringBuilder();
 
                 for (int i = 1; i < parts.size(); i++) {
@@ -145,14 +159,14 @@ public class Main {
 
                 String target = parts.get(1);
 
-                if (target.equals("echo") ||
-                    target.equals("exit") ||
-                    target.equals("type") ||
-                    target.equals("pwd") ||
-                    target.equals("cd")) {
+                if (target.equals("echo")
+                        || target.equals("exit")
+                        || target.equals("type")
+                        || target.equals("pwd")
+                        || target.equals("cd")) {
 
                     System.out.println(
-                        target + " is a shell builtin"
+                            target + " is a shell builtin"
                     );
                 } else {
 
@@ -161,11 +175,11 @@ public class Main {
 
                     if (executable != null) {
                         System.out.println(
-                            target + " is " + executable
+                                target + " is " + executable
                         );
                     } else {
                         System.out.println(
-                            target + ": not found"
+                                target + ": not found"
                         );
                     }
                 }
@@ -189,10 +203,9 @@ public class Main {
 
             } else {
                 System.out.println(
-                    cmd + ": command not found"
+                        cmd + ": command not found"
                 );
             }
         }
     }
 }
-
