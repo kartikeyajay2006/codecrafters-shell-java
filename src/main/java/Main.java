@@ -212,9 +212,12 @@ public class Main {
                 }
 
                 if (redirect != null) {
-                    File target = resolveFile(redirect.file);
-                    // echo only has stdout; 2> with echo writes nothing to the file
-                    if (!redirect.isStderr()) {
+                    if (redirect.isStderr()) {
+                        // 2> with echo: echo has no stderr, so print stdout normally
+                        System.out.println(out);
+                    } else {
+                        // stdout redirect: write to file
+                        File target = resolveFile(redirect.file);
                         writeToFile(target, out.toString() + System.lineSeparator(), redirect.isAppend());
                     }
                 } else {
