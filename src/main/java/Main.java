@@ -6,6 +6,7 @@ import org.jline.terminal.TerminalBuilder;
 import java.io.File;
 import java.io.FileWriter;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class Main {
@@ -39,7 +40,6 @@ public class Main {
     private static final List<Job> jobs = new ArrayList<>();
 
     private static List<String> parseCommand(String input) {
-
         List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
 
@@ -47,7 +47,6 @@ public class Main {
         boolean inDoubleQuote = false;
 
         for (int i = 0; i < input.length(); i++) {
-
             char c = input.charAt(i);
 
             if (inDoubleQuote && c == '\\') {
@@ -105,7 +104,6 @@ public class Main {
     }
 
     private static String findExecutable(String cmd) {
-
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null) return null;
 
@@ -173,7 +171,6 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-
         Terminal terminal = TerminalBuilder.builder()
                 .system(true)
                 .build();
@@ -211,7 +208,6 @@ public class Main {
                 .build();
 
         while (true) {
-
             String line;
             try {
                 line = lineReader.readLine("$ ");
@@ -265,8 +261,7 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // Find the indices of the most recent (current) and
-                // second most recent (previous) running jobs
+                // Determine layout symbols (+ / -) across currently alive processes
                 int lastRunningIdx = -1;
                 int secondLastRunningIdx = -1;
 
@@ -277,21 +272,36 @@ public class Main {
                     }
                 }
 
-                for (int i = 0; i < jobs.size(); i++) {
-                    Job job = jobs.get(i);
-                    if (!job.isRunning()) continue;
+                Iterator<Job> iterator = jobs.iterator();
+                int idx = 0;
+                while (iterator.hasNext()) {
+                    Job job = iterator.next();
+                    boolean active = job.isRunning();
 
                     String marker;
-                    if (i == lastRunningIdx) {
+                    if (idx == lastRunningIdx) {
                         marker = "+";
-                    } else if (i == secondLastRunningIdx) {
+                    } else if (idx == secondLastRunningIdx) {
                         marker = "-";
                     } else {
                         marker = " ";
                     }
 
-                    String status = String.format("%-24s", "Running");
-                    System.out.println("[" + job.number + "]" + marker + "  " + status + job.command + " &");
+                    if (active) {
+                        String statusStr = String.format("%-24s", "Running");
+                        System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command + " &");
+                    } else {
+                        // The job has exited cleanly (Done)
+                        String statusStr = String.format("%-24s", "Done");
+                        System.out.println("[" + job.number + "]" + marker + "  " + statusStr + job.command);
+                        // Clean up / reap the process from the table
+                        iterator.remove();
+                        // Adjust index trackers since we just removed an item
+                        if (idx <= lastRunningIdx) lastRunningIdx--;
+                        if (idx <= secondLastRunningIdx) secondLastRunningIdx--;
+                        idx--; 
+                    }
+                    idx++;
                 }
                 continue;
             }
@@ -344,7 +354,6 @@ public class Main {
             String executable = findExecutable(cmd);
 
             if (executable != null) {
-
                 Redirect redirect = findRedirect(parts);
 
                 if (background) {
@@ -406,3 +415,5 @@ public class Main {
         terminal.close();
     }
 }
+
+
