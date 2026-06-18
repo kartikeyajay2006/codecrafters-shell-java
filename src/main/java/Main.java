@@ -1,14 +1,20 @@
+import org.jline.reader.*;
+import org.jline.reader.impl.completer.StringsCompleter;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+
 import java.io.File;
 import java.io.FileWriter;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
 
 public class Main {
 
     private static File currentDirectory =
             new File(System.getProperty("user.dir"));
+
+    private static final List<String> BUILTINS =
+            List.of("echo", "exit", "type", "pwd", "cd");
 
     private static List<String> parseCommand(String input) {
 
@@ -146,13 +152,35 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
-        Scanner input = new Scanner(System.in);
+        Terminal terminal = TerminalBuilder.builder()
+                .system(true)
+                .build();
+
+        // Custom completer: only complete builtin names at word start
+        Completer completer = (reader, line, candidates) -> {
+            String word = line.word();
+            for (String builtin : BUILTINS) {
+                if (builtin.startsWith(word)) {
+                    candidates.add(new Candidate(builtin));
+                }
+            }
+        };
+
+        LineReader lineReader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .completer(completer)
+                .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)
+                .build();
 
         while (true) {
 
-            System.out.print("$ ");
+            String line;
+            try {
+                line = lineReader.readLine("$ ");
+            } catch (EndOfFileException | UserInterruptException e) {
+                break;
+            }
 
-            String line = input.nextLine();
             List<String> parts = parseCommand(line);
 
             if (parts.isEmpty()) continue;
@@ -203,7 +231,6 @@ public class Main {
 
                 if (redirect != null) {
                     if (redirect.isStderr()) {
-                        // echo has no stderr: create empty file, print stdout normally
                         File target = resolveFile(redirect.file);
                         writeToFile(target, "", redirect.isAppend());
                         System.out.println(out);
@@ -222,9 +249,7 @@ public class Main {
 
                 String target = parts.get(1);
 
-                if (target.equals("echo") || target.equals("exit")
-                        || target.equals("type") || target.equals("pwd")
-                        || target.equals("cd")) {
+                if (BUILTINS.contains(target)) {
                     System.out.println(target + " is a shell builtin");
                 } else {
                     String executable = findExecutable(target);
@@ -261,11 +286,9 @@ public class Main {
                     File target = resolveFile(redirect.file);
 
                     if (redirect.isStderr()) {
-                        // 2> or 2>>: stderr to file, stdout to terminal
                         writeToFile(target, new String(stderrBytes), redirect.isAppend());
                         System.out.print(new String(stdoutBytes));
                     } else {
-                        // > or >> or 1> or 1>>: stdout to file, stderr to terminal
                         writeToFile(target, new String(stdoutBytes), redirect.isAppend());
                         System.err.print(new String(stderrBytes));
                     }
@@ -283,5 +306,7 @@ public class Main {
                 System.out.println(cmd + ": command not found");
             }
         }
+
+        terminal.close();
     }
 }
