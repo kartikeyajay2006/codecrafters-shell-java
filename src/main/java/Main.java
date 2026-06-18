@@ -261,9 +261,11 @@ public class Main {
                     File target = resolveFile(redirect.file);
 
                     if (redirect.isStderr()) {
+                        // 2> or 2>>: stderr to file, stdout to terminal
                         writeToFile(target, new String(stderrBytes), redirect.isAppend());
                         System.out.print(new String(stdoutBytes));
                     } else {
+                        // > or >> or 1> or 1>>: stdout to file, stderr to terminal
                         writeToFile(target, new String(stdoutBytes), redirect.isAppend());
                         System.err.print(new String(stderrBytes));
                     }
