@@ -1,5 +1,4 @@
 import java.io.File;
-import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
@@ -73,10 +72,11 @@ public class Main {
             String[] parts = s.split(" ");
 
             String cmd = parts[0];
+
             String pathEnv = System.getenv("PATH");
             String[] dirs = pathEnv.split(File.pathSeparator);
 
-            File executable = null;
+            boolean found = false;
 
             for (String dir : dirs) {
                 File file = new File(dir, cmd);
@@ -85,23 +85,20 @@ public class Main {
                     file.isFile() &&
                     file.canExecute()) {
 
-                    executable = file;
+                    found = true;
                     break;
                 }
             }
 
-            if (executable != null) {
-                parts[0] = executable.getAbsolutePath();
-
-                ProcessBuilder pb =
-                    new ProcessBuilder(Arrays.asList(parts));
+            if (found) {
+                ProcessBuilder pb = new ProcessBuilder(parts);
 
                 pb.inheritIO();
 
                 Process p = pb.start();
                 p.waitFor();
             } else {
-                System.out.println(s + ": command not found");
+                System.out.println(cmd + ": command not found");
             }
         }
     }
