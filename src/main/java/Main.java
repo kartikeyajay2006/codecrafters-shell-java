@@ -91,7 +91,6 @@ public class Main {
         return null;
     }
 
-    // Represents a parsed redirect: operator token, file, and index in parts list
     private static class Redirect {
         int index;
         String operator;
@@ -99,7 +98,7 @@ public class Main {
 
         Redirect(int index, String operator, String file) {
             this.index = index;
-            this.operator  = operator;
+            this.operator = operator;
             this.file = file;
         }
 
@@ -112,10 +111,6 @@ public class Main {
         }
     }
 
-    /**
-     * Find the FIRST redirect token in parts. Returns null if none found.
-     * Recognised operators: >, 1>, >>, 1>>, 2>, 2>>
-     */
     private static Redirect findRedirect(List<String> parts) {
         for (int i = 0; i < parts.size(); i++) {
             String token = parts.get(i);
@@ -141,7 +136,6 @@ public class Main {
     }
 
     private static void writeToFile(File target, String content, boolean append) throws Exception {
-        // Ensure parent dirs exist
         if (target.getParentFile() != null) {
             target.getParentFile().mkdirs();
         }
@@ -165,16 +159,13 @@ public class Main {
 
             String cmd = parts.get(0);
 
-            // exit
             if (cmd.equals("exit")) break;
 
-            // pwd
             if (cmd.equals("pwd")) {
                 System.out.println(currentDirectory.getCanonicalPath());
                 continue;
             }
 
-            // cd
             if (cmd.equals("cd")) {
                 if (parts.size() < 2) continue;
 
@@ -199,7 +190,6 @@ public class Main {
                 continue;
             }
 
-            // echo
             if (cmd.equals("echo")) {
                 Redirect redirect = findRedirect(parts);
 
@@ -213,10 +203,11 @@ public class Main {
 
                 if (redirect != null) {
                     if (redirect.isStderr()) {
-                        // 2> with echo: echo has no stderr, so print stdout normally
+                        // echo has no stderr: create empty file, print stdout normally
+                        File target = resolveFile(redirect.file);
+                        writeToFile(target, "", redirect.isAppend());
                         System.out.println(out);
                     } else {
-                        // stdout redirect: write to file
                         File target = resolveFile(redirect.file);
                         writeToFile(target, out.toString() + System.lineSeparator(), redirect.isAppend());
                     }
@@ -226,7 +217,6 @@ public class Main {
                 continue;
             }
 
-            // type
             if (cmd.equals("type")) {
                 if (parts.size() < 2) continue;
 
@@ -255,12 +245,10 @@ public class Main {
                 Redirect redirect = findRedirect(parts);
 
                 if (redirect != null) {
-                    // Build command without redirect tokens
                     List<String> command = new ArrayList<>(parts.subList(0, redirect.index));
 
                     ProcessBuilder pb = new ProcessBuilder(command);
                     pb.directory(currentDirectory);
-                    // Always capture both streams separately
                     pb.redirectErrorStream(false);
 
                     Process process = pb.start();
@@ -273,11 +261,9 @@ public class Main {
                     File target = resolveFile(redirect.file);
 
                     if (redirect.isStderr()) {
-                        // 2> or 2>> : write stderr to file, print stdout normally
                         writeToFile(target, new String(stderrBytes), redirect.isAppend());
                         System.out.print(new String(stdoutBytes));
                     } else {
-                        // > or >> or 1> or 1>> : write stdout to file, print stderr normally
                         writeToFile(target, new String(stdoutBytes), redirect.isAppend());
                         System.err.print(new String(stderrBytes));
                     }
