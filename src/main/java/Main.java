@@ -1,4 +1,5 @@
 import java.io.File;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
@@ -10,22 +11,18 @@ public class Main {
 
             String s = input.nextLine();
 
-            // exit builtin
             if (s.equals("exit")) {
                 break;
             }
 
-            // echo builtin
             if (s.startsWith("echo ")) {
                 System.out.println(s.substring(5));
                 continue;
             }
 
-            // type builtin
             if (s.startsWith("type ")) {
                 String cmd = s.substring(5);
 
-                // Builtins
                 if (cmd.equals("echo") ||
                     cmd.equals("exit") ||
                     cmd.equals("type")) {
@@ -34,7 +31,6 @@ public class Main {
                     continue;
                 }
 
-                // Search PATH
                 String pathEnv = System.getenv("PATH");
                 String[] dirs = pathEnv.split(File.pathSeparator);
 
@@ -63,8 +59,38 @@ public class Main {
                 continue;
             }
 
-            // Invalid command
-            System.out.println(s + ": command not found");
+            // External command execution
+            String[] parts = s.split(" ");
+
+            String cmd = parts[0];
+            String pathEnv = System.getenv("PATH");
+            String[] dirs = pathEnv.split(File.pathSeparator);
+
+            File executable = null;
+
+            for (String dir : dirs) {
+                File file = new File(dir, cmd);
+
+                if (file.exists() &&
+                    file.isFile() &&
+                    file.canExecute()) {
+
+                    executable = file;
+                    break;
+                }
+            }
+
+            if (executable != null) {
+                ProcessBuilder pb =
+                    new ProcessBuilder(Arrays.asList(parts));
+
+                pb.inheritIO();
+
+                Process p = pb.start();
+                p.waitFor();
+            } else {
+                System.out.println(s + ": command not found");
+            }
         }
     }
 }
