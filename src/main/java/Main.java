@@ -37,11 +37,6 @@ public class Main {
 
     private static final List<Job> jobs = new ArrayList<>();
 
-    /**
-     * Automatic reaping logic that runs *before the prompt*.
-     * It checks for dead jobs, prints their 'Done' status line in correct list order,
-     * and clears them from our job tracker.
-     */
     private static void reapCompletedJobsBeforePrompt() {
         int lastIdx = jobs.size() - 1;
         int secondLastIdx = jobs.size() - 2;
@@ -68,9 +63,6 @@ public class Main {
         jobs.removeAll(jobsToRemove);
     }
 
-    /**
-     * Finds the smallest available job number starting from 1.
-     */
     private static int getNextAvailableJobNumber() {
         int candidate = 1;
         while (true) {
@@ -88,9 +80,6 @@ public class Main {
         }
     }
 
-    /**
-     * Inserts a job into the jobs list keeping it sorted by job number.
-     */
     private static void addJobSorted(Job newJob) {
         int index = 0;
         while (index < jobs.size() && jobs.get(index).number < newJob.number) {
@@ -270,7 +259,6 @@ public class Main {
         while (true) {
             String line;
             try {
-                // Reap completed jobs cleanly right before presenting the prompt string
                 reapCompletedJobsBeforePrompt();
                 line = lineReader.readLine("$ ");
             } catch (EndOfFileException | UserInterruptException e) {
@@ -287,6 +275,56 @@ public class Main {
                 background = true;
                 parts = new ArrayList<>(parts.subList(0, parts.size() - 1));
                 if (parts.isEmpty()) continue;
+            }
+
+            // Check if this command contains a pipeline operator '|'
+            int pipeIndex = parts.indexOf("|");
+            if (pipeIndex != -1) {
+                List<String> leftParts = parts.subList(0, pipeIndex);
+                List<String> rightParts = parts.subList(pipeIndex + 1, parts.size());
+
+                if (leftParts.isEmpty() || rightParts.isEmpty()) {
+                    System.out.println("Invalid pipeline syntax");
+                    continue;
+                }
+
+                String cmd1 = leftParts.get(0);
+                String cmd2 = rightParts.get(0);
+
+                String exec1 = findExecutable(cmd1);
+                String exec2 = findExecutable(cmd2);
+
+                if (exec1 == null) {
+                    System.out.println(cmd1 + ": command not found");
+                    continue;
+                }
+                if (exec2 == null) {
+                    System.out.println(cmd2 + ": command not found");
+                    continue;
+                }
+
+                // Resolve full absolute absolute paths for executables
+                List<String> fullLeftCommand = new ArrayList<>(leftParts);
+                fullLeftCommand.set(0, exec1);
+
+                List<String> fullRightCommand = new ArrayList<>(rightParts);
+                fullRightCommand.set(0, exec2);
+
+                // Set up standard pipeline endpoints using ProcessBuilder
+                ProcessBuilder pb1 = new ProcessBuilder(fullLeftCommand).directory(currentDirectory);
+                ProcessBuilder pb2 = new ProcessBuilder(fullRightCommand).directory(currentDirectory);
+
+                // The first process inherits standard input, final process inherits standard output
+                pb1.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
+                pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                List<Process> pipeline = ProcessBuilder.startPipeline(List.of(pb1, pb2));
+                
+                // Block the terminal until the downstream command finishes execution frame
+                pipeline.get(pipeline.size() - 1).waitFor();
+                continue;
             }
 
             String cmd = parts.get(0);
@@ -323,13 +361,11 @@ public class Main {
             }
 
             if (cmd.equals("jobs")) {
-                // Read frame markers ahead of modifications across the job pool layout
                 int lastIdx = jobs.size() - 1;
                 int secondLastIdx = jobs.size() - 2;
 
                 List<Job> jobsToRemove = new ArrayList<>();
 
-                // Single linear loop preserves exact order matching index tracking
                 for (int i = 0; i < jobs.size(); i++) {
                     Job job = jobs.get(i);
                     boolean active = job.isRunning();
@@ -353,7 +389,6 @@ public class Main {
                     }
                 }
 
-                // Discard entries evaluated as Done
                 jobs.removeAll(jobsToRemove);
                 continue;
             }
@@ -419,13 +454,10 @@ public class Main {
 
                     Process process = pb.start();
                     
-                    // Calculate and assign the smallest available recycled job number
                     int assignedJobNumber = getNextAvailableJobNumber();
                     long pid = process.pid();
 
                     String commandStr = String.join(" ", command);
-                    
-                    // Always add sorted to maintain consistent output rendering
                     addJobSorted(new Job(assignedJobNumber, pid, commandStr, process));
 
                     System.out.println("[" + assignedJobNumber + "] " + pid);
